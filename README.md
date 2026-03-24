@@ -1,6 +1,6 @@
 # Find
 
-A [Ulauncher](https://ulauncher.io/) extension for finding files and directories by name. Uses `locate` (plocate) for instant results across your entire filesystem.
+A [Ulauncher](https://ulauncher.io/) extension for finding files and directories by name. Uses `locate` for instant results across your entire filesystem.
 
 ![Find extension screenshot](screenshot.png)
 

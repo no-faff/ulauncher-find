@@ -1,7 +1,7 @@
 {
   "required_api_version": "^2.0.0",
   "name": "Find",
-  "description": "Find files and directories by name using fd (exact matching)",
+  "description": "Find files and directories by name (instant search)",
   "developer_name": "No Faff",
   "icon": "images/icon.png",
   "options": {
