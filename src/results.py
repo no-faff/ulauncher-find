@@ -49,6 +49,13 @@ def _get_terminal_action(terminal_cmd: str | None, path: str):
         return RunScriptAction(terminal_cmd, [dirname])
 
 
+_ALT_ENTER_LABELS = {
+    AltEnterAction.OPEN_FOLDER: "Open containing folder",
+    AltEnterAction.OPEN_TERMINAL: "Open in terminal",
+    AltEnterAction.COPY_PATH: "Copy path",
+}
+
+
 def _get_alt_enter_action(preferences: FindPreferences, path: str):
     if preferences.alt_enter_action == AltEnterAction.COPY_PATH:
         return CopyToClipboardAction(path)
@@ -61,6 +68,7 @@ def _get_alt_enter_action(preferences: FindPreferences, path: str):
 def generate_result_items(
     preferences: FindPreferences, results: list[str]
 ) -> list[ExtensionSmallResultItem]:
+    alt_label = _ALT_ENTER_LABELS.get(preferences.alt_enter_action, "Secondary action")
     items = []
     for path in results:
         items.append(
@@ -69,6 +77,10 @@ def generate_result_items(
                 name=path,
                 on_enter=OpenAction(path),
                 on_alt_enter=_get_alt_enter_action(preferences, path),
+                actions={
+                    "__legacy_on_enter__": {"name": "Open"},
+                    "__legacy_on_alt_enter__": {"name": alt_label},
+                },
             )
         )
     return items
