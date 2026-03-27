@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import logging
 from dataclasses import dataclass
 from pathlib import Path
@@ -7,6 +8,12 @@ from pathlib import Path
 from src.enums import AltEnterAction
 
 logger = logging.getLogger(__name__)
+
+# Workaround for Ulauncher 6 beta: PreferencesUpdateEvent doesn't fire in
+# API v2 compat mode, so saved preferences aren't picked up until restart.
+# Reading from disk on each query fixes this. Can likely be removed once
+# Ulauncher 6 is finalised.
+PREFS_FILE = Path.home() / ".config" / "ulauncher" / "ext_preferences" / "com.github.no-faff.ulauncher-find.json"
 
 
 @dataclass
@@ -34,6 +41,19 @@ def get_preferences(raw: dict[str, str]) -> FindPreferences:
         ignore_file=_expand_path(raw.get("ignore_file", "")),
         terminal_cmd=raw.get("terminal_cmd", "").strip() or None,
     )
+
+
+def load_preferences() -> FindPreferences:
+    """Read preferences directly from disk to ensure saved values are used."""
+    try:
+        data = json.loads(PREFS_FILE.read_text())
+        return get_preferences(data["preferences"])
+    except (OSError, json.JSONDecodeError, KeyError):
+        logger.warning("Could not read preferences file, using defaults")
+        return get_preferences({
+            "alt_enter_action": "0", "allow_hidden": "0", "follow_symlinks": "0",
+            "result_limit": "15", "base_dir": "/", "ignore_file": "", "terminal_cmd": "",
+        })
 
 
 def validate_preferences(preferences: FindPreferences) -> list[str]:

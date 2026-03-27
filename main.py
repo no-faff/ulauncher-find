@@ -13,7 +13,7 @@ from ulauncher.api.shared.event import (
 )
 
 from src.enums import SearchType
-from src.preferences import FindPreferences, get_preferences, validate_preferences
+from src.preferences import FindPreferences, get_preferences, load_preferences, validate_preferences
 from src.results import generate_message, generate_result_items
 from src.search import MIN_QUERY_LENGTH, search
 
@@ -57,7 +57,8 @@ class KeywordQueryEventListener(EventListener):
         if not shutil.which("locate"):
             return generate_message("plocate is not installed. Run: sudo dnf install plocate", "error")
 
-        errors = validate_preferences(extension.typed_preferences)
+        prefs = load_preferences()
+        errors = validate_preferences(prefs)
         if errors:
             return generate_message(errors[0], "error")
 
@@ -74,7 +75,7 @@ class KeywordQueryEventListener(EventListener):
                 break
 
         results = search(
-            preferences=extension.typed_preferences,
+            preferences=prefs,
             query=query,
             search_type=search_type,
         )
@@ -82,7 +83,7 @@ class KeywordQueryEventListener(EventListener):
         if not results:
             return generate_message("No results found.")
 
-        items = generate_result_items(extension.typed_preferences, results)
+        items = generate_result_items(prefs, results)
         return RenderResultListAction(items)
 
 
