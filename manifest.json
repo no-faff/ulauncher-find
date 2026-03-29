@@ -1,7 +1,7 @@
 {
   "required_api_version": "^2.0.0",
   "name": "Find",
-  "description": "Find files and directories by name (instant search)",
+  "description": "Find files and directories by name using fd, with optional fuzzy matching via fzf",
   "developer_name": "No Faff",
   "icon": "images/icon.png",
   "options": {
@@ -9,10 +9,16 @@
   },
   "preferences": [
     {
+      "id": "kw_fz",
+      "type": "keyword",
+      "name": "Fuzzy find files and directories",
+      "default_value": "fz"
+    },
+    {
       "id": "kw_all",
       "type": "keyword",
       "name": "Find files and directories",
-      "default_value": "fd"
+      "default_value": "f"
     },
     {
       "id": "kw_files",
@@ -24,7 +30,7 @@
       "id": "kw_dirs",
       "type": "keyword",
       "name": "Find directories only",
-      "default_value": "fdir"
+      "default_value": "fd"
     },
     {
       "id": "alt_enter_action",
@@ -34,11 +40,11 @@
       "default_value": 0,
       "options": [
         {
-          "text": "Open containing folder",
+          "text": "Open containing directory",
           "value": 0
         },
         {
-          "text": "Open folder in terminal",
+          "text": "Open directory in terminal",
           "value": 1
         },
         {
@@ -52,7 +58,7 @@
       "type": "input",
       "name": "Base directory",
       "description": "Where to search from. Use / to search everywhere.",
-      "default_value": "/"
+      "default_value": "~"
     },
     {
       "id": "result_limit",
