@@ -11,3 +11,8 @@ class SearchType(Enum):
     BOTH = 0
     FILES = 1
     DIRS = 2
+
+
+class MatchMode(Enum):
+    EXACT = 0
+    FUZZY = 1
