@@ -52,7 +52,7 @@ def load_preferences() -> FindPreferences:
         logger.warning("Could not read preferences file, using defaults")
         return get_preferences({
             "alt_enter_action": "0", "allow_hidden": "0", "follow_symlinks": "0",
-            "result_limit": "15", "base_dir": "/", "ignore_file": "", "terminal_cmd": "",
+            "result_limit": "15", "base_dir": "~", "ignore_file": "", "terminal_cmd": "",
         })
 
 

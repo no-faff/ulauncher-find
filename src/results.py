@@ -4,18 +4,45 @@ import logging
 import shutil
 from pathlib import Path
 
+import gi
+gi.require_version('Gio', '2.0')
+gi.require_version('Gtk', '3.0')
+from gi.repository import Gio, Gtk
+
 from ulauncher.api.shared.action.CopyToClipboardAction import CopyToClipboardAction
 from ulauncher.api.shared.action.DoNothingAction import DoNothingAction
 from ulauncher.api.shared.action.OpenAction import OpenAction
 from ulauncher.api.shared.action.RenderResultListAction import RenderResultListAction
 from ulauncher.api.shared.action.RunScriptAction import RunScriptAction
 from ulauncher.api.shared.item.ExtensionResultItem import ExtensionResultItem
-from ulauncher.api.shared.item.ExtensionSmallResultItem import ExtensionSmallResultItem
 
 from src.enums import AltEnterAction
 from src.preferences import FindPreferences
 
 logger = logging.getLogger(__name__)
+
+_icon_theme = Gtk.IconTheme.get_default()
+
+FALLBACK_FILE_ICON = "text-x-generic"
+FALLBACK_DIR_ICON = "folder"
+
+
+def _get_system_icon(path: str) -> str | None:
+    """Resolve the system icon for a file path. Returns the icon's filesystem path."""
+    try:
+        gio_file = Gio.File.new_for_path(path)
+        info = gio_file.query_info("standard::icon", Gio.FileQueryInfoFlags.NONE, None)
+        icon = info.get_icon()
+        icon_info = _icon_theme.lookup_by_gicon(icon, 48, 0)
+        if icon_info:
+            return icon_info.get_filename()
+    except Exception:
+        pass
+
+    # Fallback to generic system icon
+    fallback_name = FALLBACK_DIR_ICON if Path(path).is_dir() else FALLBACK_FILE_ICON
+    icon_info = _icon_theme.lookup_icon(fallback_name, 48, 0)
+    return icon_info.get_filename() if icon_info else None
 
 TERMINALS = ["konsole", "gnome-terminal", "xfce4-terminal", "tilix", "terminator", "kitty", "alacritty"]
 
@@ -67,14 +94,18 @@ def _get_alt_enter_action(preferences: FindPreferences, path: str):
 
 def generate_result_items(
     preferences: FindPreferences, results: list[str]
-) -> list[ExtensionSmallResultItem]:
+) -> list[ExtensionResultItem]:
     alt_label = _ALT_ENTER_LABELS.get(preferences.alt_enter_action, "Secondary action")
     items = []
     for path in results:
+        p = Path(path)
+        icon = _get_system_icon(path) or "images/icon.png"
         items.append(
-            ExtensionSmallResultItem(
-                icon="images/sub-icon.png",
-                name=path,
+            ExtensionResultItem(
+                icon=icon,
+                name=p.name,
+                description=str(p.parent),
+                highlightable=True,
                 on_enter=OpenAction(path),
                 on_alt_enter=_get_alt_enter_action(preferences, path),
                 actions={
