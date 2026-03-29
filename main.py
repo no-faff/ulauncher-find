@@ -12,7 +12,7 @@ from ulauncher.api.shared.event import (
     PreferencesUpdateEvent,
 )
 
-from src.enums import SearchType
+from src.enums import MatchMode, SearchType
 from src.preferences import FindPreferences, get_preferences, load_preferences, validate_preferences
 from src.results import generate_message, generate_result_items
 from src.search import MIN_QUERY_LENGTH, search
@@ -20,9 +20,17 @@ from src.search import MIN_QUERY_LENGTH, search
 logger = logging.getLogger(__name__)
 
 KEYWORD_SEARCH_TYPE = {
+    "kw_fz": SearchType.BOTH,
     "kw_all": SearchType.BOTH,
     "kw_files": SearchType.FILES,
     "kw_dirs": SearchType.DIRS,
+}
+
+KEYWORD_MATCH_MODE = {
+    "kw_fz": MatchMode.FUZZY,
+    "kw_all": MatchMode.EXACT,
+    "kw_files": MatchMode.EXACT,
+    "kw_dirs": MatchMode.EXACT,
 }
 
 
@@ -54,8 +62,10 @@ class KeywordQueryEventListener(EventListener):
     def on_event(
         self, event: KeywordQueryEvent, extension: FindExtension
     ) -> RenderResultListAction:
-        if not shutil.which("locate"):
-            return generate_message("plocate is not installed. Run: sudo dnf install plocate", "error")
+        from src.search import _resolve_fd_binary
+
+        if not _resolve_fd_binary():
+            return generate_message("fd is not installed. Run: sudo dnf install fd-find", "error")
 
         prefs = load_preferences()
         errors = validate_preferences(prefs)
@@ -64,20 +74,27 @@ class KeywordQueryEventListener(EventListener):
 
         query = event.get_argument()
         if not query or len(query) < MIN_QUERY_LENGTH:
-            return generate_message(f"Type at least {MIN_QUERY_LENGTH} characters to search.")
+            return generate_message(f"Type at least {MIN_QUERY_LENGTH} character to search.")
 
-        # Work out which keyword was used to determine search type
+        # Work out which keyword was used
         keyword = event.get_keyword()
         search_type = SearchType.BOTH
-        for kw_id, kw_type in KEYWORD_SEARCH_TYPE.items():
+        match_mode = MatchMode.EXACT
+        for kw_id in KEYWORD_SEARCH_TYPE:
             if extension.preferences.get(kw_id) == keyword:
-                search_type = kw_type
+                search_type = KEYWORD_SEARCH_TYPE[kw_id]
+                match_mode = KEYWORD_MATCH_MODE[kw_id]
                 break
+
+        # Check fzf is available when using fuzzy mode
+        if match_mode == MatchMode.FUZZY and not shutil.which("fzf"):
+            return generate_message("fzf is not installed. Run: sudo dnf install fzf", "error")
 
         results = search(
             preferences=prefs,
             query=query,
             search_type=search_type,
+            match_mode=match_mode,
         )
 
         if not results:
