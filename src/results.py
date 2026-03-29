@@ -105,6 +105,7 @@ def generate_result_items(
                 icon=icon,
                 name=p.name,
                 description=str(p.parent),
+                highlightable=True,
                 on_enter=OpenAction(path),
                 on_alt_enter=_get_alt_enter_action(preferences, path),
                 actions={
