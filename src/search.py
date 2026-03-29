@@ -45,7 +45,8 @@ def _build_fd_cmd(
         cmd += ["--max-results", str(preferences.result_limit)]
         cmd.append(query)
     else:
-        # Fuzzy mode: list everything, fzf will filter
+        # Fuzzy mode: cap fd candidates so it doesn't crawl the entire filesystem
+        cmd += ["--max-results", str(max(preferences.result_limit * 500, 5000))]
         cmd.append(".")
 
     cmd.append(str(preferences.base_dir))

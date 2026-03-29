@@ -87,10 +87,12 @@ class TestBuildFdCmd:
         assert "." in cmd
         assert "budget" not in cmd
 
-    def test_fuzzy_mode_no_max_results(self):
-        prefs = _make_prefs()
+    def test_fuzzy_mode_has_capped_max_results(self):
+        prefs = _make_prefs(result_limit=15)
         cmd = _build_fd_cmd(prefs, "budget", SearchType.BOTH, MatchMode.FUZZY)
-        assert "--max-results" not in cmd
+        assert "--max-results" in cmd
+        idx = cmd.index("--max-results")
+        assert int(cmd[idx + 1]) >= 5000
 
 
 class TestSearch:
