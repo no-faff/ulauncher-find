@@ -11,25 +11,25 @@
     {
       "id": "kw_fz",
       "type": "keyword",
-      "name": "Fuzzy find files and directories",
+      "name": "Fuzzy find files and directories (fz)",
       "default_value": "fz"
     },
     {
       "id": "kw_all",
       "type": "keyword",
-      "name": "Find files and directories",
+      "name": "Find files and directories (f)",
       "default_value": "f"
     },
     {
       "id": "kw_files",
       "type": "keyword",
-      "name": "Find files only",
+      "name": "Find files only (ff)",
       "default_value": "ff"
     },
     {
       "id": "kw_dirs",
       "type": "keyword",
-      "name": "Find directories only",
+      "name": "Find directories only (fd)",
       "default_value": "fd"
     },
     {
@@ -57,7 +57,7 @@
       "id": "base_dir",
       "type": "input",
       "name": "Base directory",
-      "description": "Where to search from. Use / to search everywhere.",
+      "description": "Where to search from. Comma-separated for multiple locations, e.g. '~,/mnt/data'. Use '/' to search everywhere (slow: walks /proc, /sys, /usr etc).",
       "default_value": "~"
     },
     {
@@ -112,7 +112,7 @@
       "id": "terminal_cmd",
       "type": "input",
       "name": "Terminal command",
-      "description": "Terminal emulator for 'Open in terminal'. Leave blank to auto-detect.",
+      "description": "Terminal emulator for 'Open in terminal'. Leave blank to auto-detect. For an unsupported terminal, supply a full command with {} as the directory, e.g. 'myterm --cd {}'.",
       "default_value": ""
     }
   ]

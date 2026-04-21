@@ -7,7 +7,7 @@ import pytest
 
 from src.enums import AltEnterAction, MatchMode, SearchType
 from src.preferences import FindPreferences
-from src.search import _build_fd_cmd, _resolve_fd_binary, search
+from src.search import SearchError, _build_fd_cmd, _resolve_fd_binary, search
 
 
 def _make_prefs(**overrides) -> FindPreferences:
@@ -16,11 +16,13 @@ def _make_prefs(**overrides) -> FindPreferences:
         "allow_hidden": False,
         "follow_symlinks": False,
         "result_limit": 15,
-        "base_dir": Path("/home/test"),
+        "base_dir": [Path("/home/test")],
         "ignore_file": None,
         "terminal_cmd": None,
     }
     defaults.update(overrides)
+    if "base_dir" in overrides and not isinstance(overrides["base_dir"], list):
+        defaults["base_dir"] = [overrides["base_dir"]]
     return FindPreferences(**defaults)
 
 
@@ -47,6 +49,35 @@ class TestBuildFdCmd:
         assert "budget" in cmd
         assert str(Path("/home/test")) in cmd
         assert "--max-results" in cmd
+
+    def test_exact_mode_uses_fixed_strings(self):
+        prefs = _make_prefs()
+        cmd = _build_fd_cmd(prefs, "foo.txt", SearchType.BOTH, MatchMode.EXACT)
+        assert "--fixed-strings" in cmd
+
+    def test_fuzzy_mode_no_fixed_strings(self):
+        prefs = _make_prefs()
+        cmd = _build_fd_cmd(prefs, "foo", SearchType.BOTH, MatchMode.FUZZY)
+        assert "--fixed-strings" not in cmd
+
+    def test_no_full_path_for_single_word(self):
+        prefs = _make_prefs()
+        cmd = _build_fd_cmd(prefs, "foo", SearchType.BOTH, MatchMode.EXACT)
+        assert "--full-path" not in cmd
+
+    def test_full_path_when_query_has_space(self):
+        prefs = _make_prefs()
+        cmd = _build_fd_cmd(prefs, "foo bar", SearchType.BOTH, MatchMode.EXACT)
+        assert "--full-path" in cmd
+
+    def test_multiple_base_dirs_all_appended(self):
+        prefs = _make_prefs(base_dir=[Path("/tmp"), Path("/var/log")])
+        cmd = _build_fd_cmd(prefs, "foo", SearchType.BOTH, MatchMode.EXACT)
+        assert "/tmp" in cmd
+        assert "/var/log" in cmd
+        # Both should appear after the query positional arg
+        assert cmd.index("/tmp") > cmd.index("foo")
+        assert cmd.index("/var/log") > cmd.index("foo")
 
     def test_files_only(self):
         prefs = _make_prefs()
@@ -112,3 +143,25 @@ class TestSearch:
         prefs = _make_prefs(base_dir=Path.home())
         results = search(prefs, "python", SearchType.BOTH, MatchMode.FUZZY)
         assert isinstance(results, list)
+
+    def test_exact_returns_partial_results_on_slow_fd(self, tmp_path):
+        """Narrow queries used to time out and return nothing. They should now
+        return whatever fd found before the idle/hard timeout."""
+        import time
+        # Create a deep, mostly-empty tree with just a couple of matches so fd
+        # spends most of its time walking nothing.
+        for i in range(200):
+            (tmp_path / f"dir_{i:03d}").mkdir()
+        (tmp_path / "findme_a").mkdir()
+        (tmp_path / "findme_b").mkdir()
+        prefs = _make_prefs(base_dir=tmp_path, result_limit=25)
+
+        start = time.monotonic()
+        results = search(prefs, "findme", SearchType.DIRS, MatchMode.EXACT)
+        elapsed = time.monotonic() - start
+
+        assert len(results) == 2
+        assert any("findme_a" in r for r in results)
+        assert any("findme_b" in r for r in results)
+        # Should return well inside the 5 second hard timeout
+        assert elapsed < 4.0

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import shlex
 import shutil
 from pathlib import Path
 
@@ -21,34 +22,47 @@ from src.preferences import FindPreferences
 
 logger = logging.getLogger(__name__)
 
-_icon_theme = Gtk.IconTheme.get_default()
-
 FALLBACK_FILE_ICON = "text-x-generic"
 FALLBACK_DIR_ICON = "folder"
 
 
 def _get_system_icon(path: str) -> str | None:
     """Resolve the system icon for a file path. Returns the icon's filesystem path."""
+    # Gtk.IconTheme.get_default() tracks the live theme, so calling it each
+    # time picks up theme changes without needing to restart Ulauncher.
+    icon_theme = Gtk.IconTheme.get_default()
     try:
         gio_file = Gio.File.new_for_path(path)
         info = gio_file.query_info("standard::icon", Gio.FileQueryInfoFlags.NONE, None)
         icon = info.get_icon()
-        icon_info = _icon_theme.lookup_by_gicon(icon, 48, 0)
+        icon_info = icon_theme.lookup_by_gicon(icon, 48, 0)
         if icon_info:
             return icon_info.get_filename()
     except Exception:
-        pass
+        logger.debug("Icon lookup failed for %s", path, exc_info=True)
 
-    # Fallback to generic system icon
     fallback_name = FALLBACK_DIR_ICON if Path(path).is_dir() else FALLBACK_FILE_ICON
-    icon_info = _icon_theme.lookup_icon(fallback_name, 48, 0)
+    icon_info = icon_theme.lookup_icon(fallback_name, 48, 0)
     return icon_info.get_filename() if icon_info else None
 
-TERMINALS = ["konsole", "gnome-terminal", "xfce4-terminal", "tilix", "terminator", "kitty", "alacritty"]
+
+# Known terminals and their "open this directory" flag set.
+# Listed in auto-detect preference order.
+TERMINAL_ARGS: dict[str, list[str]] = {
+    "konsole": ["--workdir", "{}"],
+    "gnome-terminal": ["--working-directory", "{}"],
+    "xfce4-terminal": ["--working-directory", "{}"],
+    "tilix": ["--working-directory", "{}"],
+    "terminator": ["--working-directory", "{}"],
+    "kitty": ["--directory", "{}"],
+    "alacritty": ["--working-directory", "{}"],
+    "foot": ["--working-directory", "{}"],
+    "wezterm": ["start", "--cwd", "{}"],
+}
 
 
 def _detect_terminal() -> str | None:
-    for term in TERMINALS:
+    for term in TERMINAL_ARGS:
         if shutil.which(term):
             return term
     return None
@@ -68,12 +82,19 @@ def _get_terminal_action(terminal_cmd: str | None, path: str):
     if terminal_cmd is None:
         return DoNothingAction()
 
-    if terminal_cmd in ("konsole", "gnome-terminal", "tilix", "terminator", "xfce4-terminal"):
-        return RunScriptAction(terminal_cmd, ["--working-directory", dirname])
-    elif terminal_cmd in ("kitty", "alacritty"):
-        return RunScriptAction(terminal_cmd, ["--directory", dirname])
-    else:
-        return RunScriptAction(terminal_cmd, [dirname])
+    # Custom template: user supplied a full command with {} as the directory slot
+    if "{}" in terminal_cmd:
+        parts = [p.replace("{}", dirname) for p in shlex.split(terminal_cmd)]
+        if not parts:
+            return DoNothingAction()
+        return RunScriptAction(parts[0], parts[1:])
+
+    if terminal_cmd in TERMINAL_ARGS:
+        args = [a.replace("{}", dirname) for a in TERMINAL_ARGS[terminal_cmd]]
+        return RunScriptAction(terminal_cmd, args)
+
+    # Unknown terminal: best effort, pass the directory as the sole argument
+    return RunScriptAction(terminal_cmd, [dirname])
 
 
 _ALT_ENTER_LABELS = {
