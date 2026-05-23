@@ -1,7 +1,3 @@
-CLAUDE.md
-HANDOFF.md
-exports/
-non-repo-files/
 __pycache__/
 *.pyc
 .pytest_cache/
