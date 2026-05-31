@@ -27,9 +27,14 @@ FALLBACK_DIR_ICON = "folder"
 
 
 def _get_system_icon(path: str) -> str | None:
-    """Resolve the system icon for a file path. Returns the icon's filesystem path."""
-    # Gtk.IconTheme.get_default() tracks the live theme, so calling it each
-    # time picks up theme changes without needing to restart Ulauncher.
+    """Return the themed icon file for a path, or None if even the fallback is
+    missing from the theme.
+
+    Tries the file's own content-type icon via GIO first, then falls back to a
+    generic file or folder icon by name, so a caller still gets something for a
+    path that no longer exists. Gtk.IconTheme.get_default() is fetched each call
+    rather than cached so a theme change is picked up without restarting.
+    """
     icon_theme = Gtk.IconTheme.get_default()
     try:
         gio_file = Gio.File.new_for_path(path)
@@ -39,6 +44,8 @@ def _get_system_icon(path: str) -> str | None:
         if icon_info:
             return icon_info.get_filename()
     except Exception:
+        # GIO raises a wide, version-dependent set of GErrors for unreadable or
+        # vanished paths; the generic fallback below covers all of them.
         logger.debug("Icon lookup failed for %s", path, exc_info=True)
 
     fallback_name = FALLBACK_DIR_ICON if Path(path).is_dir() else FALLBACK_FILE_ICON
@@ -46,11 +53,15 @@ def _get_system_icon(path: str) -> str | None:
     return icon_info.get_filename() if icon_info else None
 
 
-# Known terminals and their "open this directory" flag set.
-# Listed in auto-detect preference order.
+# Auto-detect picks the first of these that is installed, so keep common desktop
+# terminals near the top. The value is the flag set that opens the terminal in a
+# given directory, with {} as the directory slot.
 TERMINAL_ARGS: dict[str, list[str]] = {
     "konsole": ["--workdir", "{}"],
     "gnome-terminal": ["--working-directory", "{}"],
+    # ptyxis treats --working-directory as a modifier, so it needs an explicit
+    # action (--new-window) to actually open in that directory.
+    "ptyxis": ["--new-window", "--working-directory", "{}"],
     "xfce4-terminal": ["--working-directory", "{}"],
     "tilix": ["--working-directory", "{}"],
     "terminator": ["--working-directory", "{}"],
@@ -73,28 +84,35 @@ def _get_dirname(path_name: str) -> str:
     return str(p) if p.is_dir() else str(p.parent)
 
 
-def _get_terminal_action(terminal_cmd: str | None, path: str):
-    dirname = _get_dirname(path)
+def _terminal_argv(terminal_cmd: str, dirname: str) -> list[str]:
+    """Resolve a terminal command into an argv list with the directory filled in.
 
+    The {} slot is substituted after splitting, so a directory containing spaces
+    stays a single argument.
+    """
+    if "{}" in terminal_cmd:
+        return [part.replace("{}", dirname) for part in shlex.split(terminal_cmd)]
+    if terminal_cmd in TERMINAL_ARGS:
+        return [terminal_cmd] + [a.replace("{}", dirname) for a in TERMINAL_ARGS[terminal_cmd]]
+    # Unknown terminal: best effort, pass the directory as the sole argument.
+    return [terminal_cmd, dirname]
+
+
+def _get_terminal_action(terminal_cmd: str | None, path: str):
     if terminal_cmd is None:
         terminal_cmd = _detect_terminal()
-
     if terminal_cmd is None:
         return DoNothingAction()
 
-    # Custom template: user supplied a full command with {} as the directory slot
-    if "{}" in terminal_cmd:
-        parts = [p.replace("{}", dirname) for p in shlex.split(terminal_cmd)]
-        if not parts:
-            return DoNothingAction()
-        return RunScriptAction(parts[0], parts[1:])
+    argv = _terminal_argv(terminal_cmd, _get_dirname(path))
+    if not argv:
+        return DoNothingAction()
 
-    if terminal_cmd in TERMINAL_ARGS:
-        args = [a.replace("{}", dirname) for a in TERMINAL_ARGS[terminal_cmd]]
-        return RunScriptAction(terminal_cmd, args)
-
-    # Unknown terminal: best effort, pass the directory as the sole argument
-    return RunScriptAction(terminal_cmd, [dirname])
+    # RunScriptAction runs its argument through a shell, so build one quoted
+    # command string rather than handing it an argv list (which it silently
+    # rejects). shlex.quote on every token keeps a directory named with shell
+    # metacharacters an inert literal, not an injection.
+    return RunScriptAction(" ".join(shlex.quote(part) for part in argv))
 
 
 _ALT_ENTER_LABELS = {
@@ -129,6 +147,9 @@ def generate_result_items(
                 highlightable=True,
                 on_enter=OpenAction(path),
                 on_alt_enter=_get_alt_enter_action(preferences, path),
+                # Naming the legacy actions gives the alt-enter chooser readable
+                # labels instead of Ulauncher's generic defaults; the keys are
+                # the ones Ulauncher maps back to on_enter/on_alt_enter.
                 actions={
                     "__legacy_on_enter__": {"name": "Open"},
                     "__legacy_on_alt_enter__": {"name": alt_label},
