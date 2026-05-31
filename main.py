@@ -20,7 +20,7 @@ from src.preferences import (
     validate_preferences,
 )
 from src.results import generate_message, generate_result_items
-from src.search import MIN_QUERY_LENGTH, SearchError, _resolve_fd_binary, search
+from src.search import MIN_QUERY_LENGTH, SearchError, resolve_fd_binary, search
 
 logger = logging.getLogger(__name__)
 
@@ -67,11 +67,20 @@ class KeywordQueryEventListener(EventListener):
     def on_event(
         self, event: KeywordQueryEvent, extension: FindExtension
     ) -> RenderResultListAction:
-        if not _resolve_fd_binary():
+        if not resolve_fd_binary():
             return generate_message("fd is not installed. Run: sudo dnf install fd-find", "error")
 
         raw_prefs = load_raw_preferences()
-        prefs = get_preferences(raw_prefs)
+        try:
+            prefs = get_preferences(raw_prefs)
+        except (ValueError, KeyError):
+            # The prefs file is user-editable, so a non-numeric result limit or
+            # timeout would otherwise raise here and die unseen in the listener
+            # thread. Surface it instead of failing silently.
+            logger.warning("Invalid preference value, check the extension settings", exc_info=True)
+            return generate_message(
+                "A preference value is invalid. Check the extension settings.", "error"
+            )
         errors = validate_preferences(prefs)
         if errors:
             return generate_message(errors[0], "error")
