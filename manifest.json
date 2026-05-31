@@ -57,7 +57,7 @@
       "id": "base_dir",
       "type": "input",
       "name": "Base directory",
-      "description": "Where to search from. Comma-separated for multiple locations, e.g. '~,/mnt/data'. Use '/' to search everywhere (slow: walks /proc, /sys, /usr etc).",
+      "description": "Where to search from. Comma-separated for multiple locations, e.g. '~,/data'. Use '/' to search everywhere (slow: walks /proc, /sys, /usr etc).",
       "default_value": "~"
     },
     {
@@ -66,6 +66,13 @@
       "name": "Result limit",
       "description": "Maximum number of results to show.",
       "default_value": "15"
+    },
+    {
+      "id": "search_timeout",
+      "type": "input",
+      "name": "Search time limit (seconds)",
+      "description": "How long a search may run before showing what it found. A search that reaches the result limit returns instantly; one that finds fewer keeps looking until this limit. Lower feels snappier, higher catches more on large or slow drives.",
+      "default_value": "5"
     },
     {
       "id": "allow_hidden",
