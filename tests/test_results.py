@@ -1,78 +1,78 @@
 from __future__ import annotations
 
-from pathlib import Path
+import shlex
 from unittest.mock import patch
 
 from src.results import _get_system_icon, _get_terminal_action
 
 
-def _action_type(action: dict) -> str:
+def _script(action) -> str:
+    # RunScriptAction(script) -> {"type": ..., "data": [script, ""]}
+    return action["data"][0]
+
+
+def _effect_type(action) -> str:
     return action.get("type", "")
 
 
-def _run_script_parts(action: dict) -> tuple[str, list[str]]:
-    # RunScriptAction returns {"type": ..., "data": [cmd, [args]]}
-    cmd, args = action["data"]
-    return cmd, list(args)
-
-
 class TestGetSystemIcon:
-    def test_returns_string_path_for_real_file(self, tmp_path):
-        test_file = tmp_path / "test.txt"
-        test_file.write_text("hello")
-        icon_path = _get_system_icon(str(test_file))
-        assert icon_path is not None
-        assert isinstance(icon_path, str)
+    def test_real_file(self, tmp_path):
+        f = tmp_path / "thing.txt"
+        f.write_text("x")
+        icon = _get_system_icon(str(f))
+        assert isinstance(icon, str) and icon
 
-    def test_returns_string_path_for_directory(self, tmp_path):
-        icon_path = _get_system_icon(str(tmp_path))
-        assert icon_path is not None
-        assert isinstance(icon_path, str)
+    def test_directory(self, tmp_path):
+        icon = _get_system_icon(str(tmp_path))
+        assert isinstance(icon, str) and icon
 
-    def test_returns_fallback_for_nonexistent_path(self):
-        icon_path = _get_system_icon("/nonexistent/path/file.xyz")
-        assert icon_path is not None
-        assert isinstance(icon_path, str)
+    def test_nonexistent_path_falls_back(self):
+        icon = _get_system_icon("/no/such/path/file.xyz")
+        assert isinstance(icon, str) and icon
 
 
 class TestGetTerminalAction:
-    def test_no_terminal_and_none_detected(self, tmp_path):
+    def test_none_detected_does_nothing(self, tmp_path):
         with patch("src.results._detect_terminal", return_value=None):
             action = _get_terminal_action(None, str(tmp_path))
-        assert _action_type(action) == "effect:do_nothing"
+        assert _effect_type(action) == "effect:do_nothing"
 
-    def test_known_terminal_kitty(self, tmp_path):
-        action = _get_terminal_action("kitty", str(tmp_path))
-        cmd, args = _run_script_parts(action)
-        assert cmd == "kitty"
-        assert "--directory" in args
-        assert str(tmp_path) in args
+    def test_known_konsole(self, tmp_path):
+        script = _script(_get_terminal_action("konsole", str(tmp_path)))
+        assert "konsole" in script
+        assert "--workdir" in script
+        assert str(tmp_path) in script
 
-    def test_known_terminal_konsole_uses_workdir(self, tmp_path):
-        action = _get_terminal_action("konsole", str(tmp_path))
-        cmd, args = _run_script_parts(action)
-        assert cmd == "konsole"
-        assert "--workdir" in args
-        assert str(tmp_path) in args
+    def test_known_kitty(self, tmp_path):
+        script = _script(_get_terminal_action("kitty", str(tmp_path)))
+        assert "kitty" in script and "--directory" in script
 
-    def test_custom_template_with_placeholder(self, tmp_path):
-        action = _get_terminal_action("myterm --cd {} --title find", str(tmp_path))
-        cmd, args = _run_script_parts(action)
-        assert cmd == "myterm"
-        assert "--cd" in args
-        assert str(tmp_path) in args
-        assert "--title" in args
+    def test_ptyxis_uses_new_window(self, tmp_path):
+        script = _script(_get_terminal_action("ptyxis", str(tmp_path)))
+        assert "ptyxis" in script
+        assert "--new-window" in script
+        assert "--working-directory" in script
 
-    def test_unknown_terminal_without_placeholder_passes_dir(self, tmp_path):
-        action = _get_terminal_action("mystery-term", str(tmp_path))
-        cmd, args = _run_script_parts(action)
-        assert cmd == "mystery-term"
-        assert args == [str(tmp_path)]
+    def test_custom_template(self, tmp_path):
+        script = _script(_get_terminal_action("myterm --cd {} --title find", str(tmp_path)))
+        assert "myterm" in script and "--cd" in script and "--title" in script and "find" in script
+        assert str(tmp_path) in script
 
-    def test_passes_parent_dir_for_file(self, tmp_path):
-        test_file = tmp_path / "hello.txt"
-        test_file.write_text("x")
-        action = _get_terminal_action("kitty", str(test_file))
-        _, args = _run_script_parts(action)
-        assert str(tmp_path) in args
-        assert str(test_file) not in args
+    def test_unknown_terminal_passes_dir(self, tmp_path):
+        script = _script(_get_terminal_action("mystery-term", str(tmp_path)))
+        assert "mystery-term" in script and str(tmp_path) in script
+
+    def test_file_passes_parent_dir(self, tmp_path):
+        f = tmp_path / "hello.txt"
+        f.write_text("x")
+        script = _script(_get_terminal_action("kitty", str(f)))
+        assert str(tmp_path) in script
+        assert str(f) not in script
+
+    def test_hostile_dirname_is_quoted(self, tmp_path):
+        evil = tmp_path / "a; touch pwned"
+        evil.mkdir()
+        script = _script(_get_terminal_action("kitty", str(evil)))
+        # The directory must appear shell-quoted so its metacharacters stay inert.
+        assert shlex.quote(str(evil)) in script
+        assert "; touch pwned" not in script.replace(shlex.quote(str(evil)), "")
