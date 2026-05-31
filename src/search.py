@@ -51,9 +51,9 @@ def _build_fd_cmd(
     cmd: list[str] = [fd_bin, "-a", "--color", "never"]
 
     # Match against the full path only when the query contains a space. That
-    # way "crap j" still finds things under ".../crap journalism/..." but a
-    # single word like "crap" matches filenames, not every grandchild of some
-    # unrelated folder whose parent path happens to contain "crap".
+    # way "report march" still finds things under ".../monthly reports/..." but
+    # a single word like "report" matches filenames, not every grandchild of
+    # some unrelated folder whose parent path happens to contain "report".
     if match_mode == MatchMode.EXACT and " " in query:
         cmd.append("--full-path")
 
